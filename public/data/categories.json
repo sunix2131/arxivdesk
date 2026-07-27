@@ -1,0 +1,79 @@
+[
+  {
+    "slug": "ai",
+    "label": "Artificial Intelligence",
+    "short": "AI",
+    "arxiv": ["cs.AI"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "machine-learning",
+    "label": "Machine Learning",
+    "short": "ML",
+    "arxiv": ["cs.LG", "stat.ML"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "computation-language",
+    "label": "Computation and Language",
+    "short": "LLM/NLP",
+    "arxiv": ["cs.CL"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "computer-vision",
+    "label": "Computer Vision",
+    "short": "Vision",
+    "arxiv": ["cs.CV"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "software-engineering",
+    "label": "Software Engineering",
+    "short": "Software",
+    "arxiv": ["cs.SE"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "cryptography-security",
+    "label": "Cryptography and Security",
+    "short": "Security",
+    "arxiv": ["cs.CR"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "algorithms",
+    "label": "Data Structures and Algorithms",
+    "short": "Algorithms",
+    "arxiv": ["cs.DS", "cs.CC", "cs.DM", "cs.CG", "cs.GT", "cs.LO"],
+    "enabledByDefault": true
+  },
+  {
+    "slug": "mathematics",
+    "label": "Mathematics",
+    "short": "Math",
+    "arxiv": ["math.*"],
+    "enabledByDefault": false
+  },
+  {
+    "slug": "physics",
+    "label": "Physics",
+    "short": "Physics",
+    "arxiv": ["physics.*"],
+    "enabledByDefault": false
+  },
+  {
+    "slug": "quantum-physics",
+    "label": "Quantum Physics",
+    "short": "Quantum",
+    "arxiv": ["quant-ph"],
+    "enabledByDefault": false
+  },
+  {
+    "slug": "statistics",
+    "label": "Statistics",
+    "short": "Stats",
+    "arxiv": ["stat.*"],
+    "enabledByDefault": true
+  }
+]
