@@ -26,4 +26,9 @@ export const formatDateTime = (value?: string, locale = 'en') =>
       ? 'Никогда'
       : 'Never';
 
-export const isToday = (value: string) => new Date(value).getTime() >= startOfToday();
+export const isToday = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  const tomorrow = new Date();
+  tomorrow.setHours(24, 0, 0, 0);
+  return timestamp >= startOfToday() && timestamp < tomorrow.getTime();
+};
