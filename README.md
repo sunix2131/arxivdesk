@@ -46,6 +46,7 @@ The app will be available at `http://localhost:5173`.
 |---------------------|--------------------------------------------------|
 | `npm run dev`       | Start Vite dev server on port 5173               |
 | `npm run build`     | Type-check and build for production              |
+| `npm test`          | Run deterministic unit tests                     |
 | `npm run preview`   | Preview production build                         |
 | `npm run sync`      | Fetch papers from arXiv API into local JSON      |
 | `npm run translate:ru` | Translate synced papers to Russian           |
@@ -57,7 +58,7 @@ Copy `.env.example` to `.env` and adjust as needed. See the example file for all
 ## Known Limitations
 
 - `npm run sync` must be run before first use to populate the local paper database; the app shows an empty state otherwise
-- No automated test suite
+- Browser-level and accessibility tests are not implemented yet
 - No authentication or user accounts
 - arXiv API may rate-limit; the sync script falls back to RSS feeds automatically
 - `@vitejs/plugin-react` is in `dependencies` rather than `devDependencies`
