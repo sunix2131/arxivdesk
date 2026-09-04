@@ -8,6 +8,7 @@ export function useRemoteArxivSearch(query: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
+  const paginationController = useRef<AbortController>();
 
   const cleanQuery = query.trim();
   const canSearch = cleanQuery.length >= 2;
@@ -16,6 +17,8 @@ export function useRemoteArxivSearch(query: string) {
   useEffect(() => {
     const id = requestId.current + 1;
     requestId.current = id;
+    const controller = new AbortController();
+    paginationController.current?.abort();
 
     if (!canSearch) {
       setPapers([]);
@@ -29,14 +32,15 @@ export function useRemoteArxivSearch(query: string) {
     setError(undefined);
 
     const timeout = window.setTimeout(() => {
-      searchArxivRemote(cleanQuery, 0)
+      searchArxivRemote(cleanQuery, 0, controller.signal)
         .then((result) => {
           if (requestId.current !== id) return;
           setPapers(result.papers);
           setTotal(result.total);
           writeRemotePaperCache(result.papers);
         })
-        .catch((searchError) => {
+        .catch((searchError: Error) => {
+          if (searchError.name === 'AbortError') return;
           if (requestId.current !== id) return;
           setPapers([]);
           setTotal(0);
@@ -47,17 +51,27 @@ export function useRemoteArxivSearch(query: string) {
         });
     }, 550);
 
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+      paginationController.current?.abort();
+    };
   }, [canSearch, cleanQuery]);
 
   const loadMore = async () => {
     if (!canSearch || isLoading) return;
 
+    const id = requestId.current;
+    const offset = papers.length;
+    const controller = new AbortController();
+    paginationController.current?.abort();
+    paginationController.current = controller;
     setIsLoading(true);
     setError(undefined);
 
     try {
-      const result = await searchArxivRemote(cleanQuery, papers.length);
+      const result = await searchArxivRemote(cleanQuery, offset, controller.signal);
+      if (requestId.current !== id) return;
       setPapers((current) => {
         const next = mergePapers([...current, ...result.papers]);
         writeRemotePaperCache(next);
@@ -65,9 +79,11 @@ export function useRemoteArxivSearch(query: string) {
       });
       setTotal(result.total);
     } catch (loadError) {
+      if ((loadError as Error).name === 'AbortError') return;
+      if (requestId.current !== id) return;
       setError((loadError as Error).message);
     } finally {
-      setIsLoading(false);
+      if (requestId.current === id && paginationController.current === controller) setIsLoading(false);
     }
   };
 

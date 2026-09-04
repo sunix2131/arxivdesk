@@ -1,68 +1,79 @@
 # arXiv Reader
 
-A research paper browser for arXiv with Russian translation support. Browse recent papers by category, search the database, save papers for later, and track your reading history — all with offline-first access.
+A local-first reader for browsing arXiv papers. It keeps the paper index in a JSON snapshot and stores saved papers, notes and reading history in the browser.
 
-## Features
+The repository does not contain a prebuilt research database. Run the sync command once before opening the app.
 
-- **Browse & Discover** — Explore papers across arXiv categories with a responsive grid or list layout
-- **Search** — Full-text search across titles, abstracts, and authors
-- **Save & Track** — Bookmark papers and maintain a reading history
-- **Offline-First** — Papers are synced locally via `npm run sync`; no network required after sync
-- **i18n** — English and Russian interface, with optional machine translation of titles and abstracts
-- **Dark/Light Theme** — System-aware theme with manual toggle
+## Run locally
 
-## Tech Stack
-
-| Layer       | Technology                                      |
-|-------------|-------------------------------------------------|
-| Framework   | React 18, TypeScript                            |
-| Build       | Vite 6                                          |
-| Styling     | TailwindCSS 3, PostCSS, Autoprefixer            |
-| Animation   | Framer Motion                                   |
-| Routing     | React Router DOM v6                             |
-| Icons       | Lucide React                                    |
-| Translation | @vitalets/google-translate-api                  |
-| API         | arXiv API (export.arxiv.org), arXiv RSS fallback|
-| Fonts       | @fontsource/inter                               |
-
-## Quick Start
+Requires Node.js 22 or newer.
 
 ```bash
-# Install dependencies
-npm install
-
-# Sync papers from arXiv (required first run)
+npm ci
+cp .env.example .env
 npm run sync
-
-# Start dev server
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+Vite serves the app at `http://localhost:5173` and proxies live searches to the arXiv API. The initial sync covers the previous 90 days by default. It can take a while because requests are deliberately spaced out.
 
-## Scripts
+## What is implemented
 
-| Script              | Description                                      |
-|---------------------|--------------------------------------------------|
-| `npm run dev`       | Start Vite dev server on port 5173               |
-| `npm run build`     | Type-check and build for production              |
-| `npm test`          | Run deterministic unit tests                     |
-| `npm run preview`   | Preview production build                         |
-| `npm run sync`      | Fetch papers from arXiv API into local JSON      |
-| `npm run translate:ru` | Translate synced papers to Russian           |
+- local search across titles, abstracts, authors, categories and translated text;
+- category and date filters;
+- saved papers, notes and reading history in `localStorage`;
+- English and Russian interface;
+- optional Russian translation of the synced title and abstract;
+- live arXiv search with debouncing, pagination and stale-request cancellation;
+- light, dark and system themes.
 
-## Environment Variables
+There are no accounts or server-side user records. Clearing the browser storage removes the reading state.
 
-Copy `.env.example` to `.env` and adjust as needed. See the example file for all available options.
+## Updating the paper snapshot
 
-## Known Limitations
+`npm run sync` reads `public/data/categories.json`, downloads matching entries and writes `public/data/papers.json`. Existing translations are retained when an entry is refreshed.
 
-- `npm run sync` must be run before first use to populate the local paper database; the app shows an empty state otherwise
-- Browser-level and accessibility tests are not implemented yet
-- No authentication or user accounts
-- arXiv API may rate-limit; the sync script falls back to RSS feeds automatically
-- `@vitejs/plugin-react` is in `dependencies` rather than `devDependencies`
+The defaults can be changed in `.env`:
 
-## License
+```dotenv
+ARXIV_DAYS_TO_KEEP=30
+ARXIV_MAX_RESULTS=1000
+ARXIV_CATEGORY_SLUGS=ai,statistics
+```
 
-MIT
+`ARXIV_CATEGORY_SLUGS` contains slugs from `public/data/categories.json`. `ARXIV_QUERIES` can be used instead when exact arXiv category expressions are needed.
+
+Translation is a separate, resumable step:
+
+```bash
+TRANSLATE_LIMIT=20 npm run translate:ru
+```
+
+The translation script uses the unofficial `@vitalets/google-translate-api` package. It may be rate-limited or stop working when the upstream service changes; papers without a translation remain readable in English.
+
+## Live search outside local development
+
+The development server provides `/arxiv-api` as a same-origin proxy. A static host needs an equivalent endpoint. Set `VITE_ARXIV_API_URL` at build time if the endpoint has another path:
+
+```dotenv
+VITE_ARXIV_API_URL=/api/arxiv
+```
+
+The browser does not fall back to a public CORS proxy. If the configured endpoint is unavailable, local search continues to work and the remote error is shown in the search page.
+
+## Checks
+
+```bash
+npm test
+npm run build
+```
+
+The tests cover filters, date boundaries, arXiv ID queries, free-text query construction and cache merging. Browser-level tests are not included yet.
+
+## Current limits
+
+- synced papers are stored as one JSON file and loaded in full;
+- reading state is local to one browser profile;
+- the sync parser expects the current arXiv Atom and RSS formats;
+- translation has no provider guarantee;
+- a deployed live search needs a same-origin proxy.

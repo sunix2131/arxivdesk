@@ -2,12 +2,13 @@ import type { Paper } from '../types';
 
 const PAGE_SIZE = 25;
 const SESSION_KEY = 'research-reader:remote-papers:v1';
+const API_URL = import.meta.env.VITE_ARXIV_API_URL || '/arxiv-api';
 
 const readText = (element: Element, tag: string) => element.getElementsByTagName(tag)[0]?.textContent?.replace(/\s+/g, ' ').trim() || '';
 
 const arxivIdFromUrl = (url: string) => url.split('/abs/')[1]?.replace(/v\d+$/, '') || '';
 
-const buildSearchQuery = (query: string) => {
+export const buildSearchQuery = (query: string) => {
   const trimmed = query.trim();
   if (/^\d{4}\.\d{4,5}(v\d+)?$/i.test(trimmed)) return { idList: trimmed.replace(/v\d+$/i, ''), searchQuery: '' };
 
@@ -20,7 +21,7 @@ const buildSearchQuery = (query: string) => {
   return { idList: '', searchQuery: terms.map((term) => `all:${term}`).join(' AND ') || `all:${trimmed}` };
 };
 
-const buildUrl = (query: string, start: number) => {
+export const buildSearchUrl = (query: string, start: number, apiUrl = API_URL) => {
   const { idList, searchQuery } = buildSearchQuery(query);
   const params = new URLSearchParams({
     start: String(start),
@@ -32,20 +33,13 @@ const buildUrl = (query: string, start: number) => {
   if (idList) params.set('id_list', idList);
   else params.set('search_query', searchQuery);
 
-  return `https://export.arxiv.org/api/query?${params}`;
+  return `${apiUrl}?${params}`;
 };
 
-const fetchXml = async (url: string) => {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    return response.text();
-  } catch (error) {
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) throw error;
-    return response.text();
-  }
+const fetchXml = async (url: string, signal?: AbortSignal) => {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`arXiv request failed: ${response.status} ${response.statusText}`);
+  return response.text();
 };
 
 const parsePaper = (entry: Element): Paper => {
@@ -83,9 +77,12 @@ export type RemoteSearchResult = {
   total: number;
 };
 
-export const searchArxivRemote = async (query: string, start: number): Promise<RemoteSearchResult> => {
-  const xml = await fetchXml(buildUrl(query, start));
+export const searchArxivRemote = async (query: string, start: number, signal?: AbortSignal): Promise<RemoteSearchResult> => {
+  const xml = await fetchXml(buildSearchUrl(query, start), signal);
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length > 0) {
+    throw new Error('arXiv returned invalid XML.');
+  }
   const total = Number(doc.getElementsByTagName('opensearch:totalResults')[0]?.textContent || 0);
   const papers = [...doc.getElementsByTagName('entry')].map(parsePaper).filter((paper) => paper.id);
 
