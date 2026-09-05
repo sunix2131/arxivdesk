@@ -1,4 +1,4 @@
-# arXiv Reader
+# ArxivDesk
 
 A local-first reader for browsing arXiv papers. It keeps the paper index in a JSON snapshot and stores saved papers, notes and reading history in the browser.
 
