@@ -1,7 +1,9 @@
 import type { Paper } from '../types';
+import { readStorage, writeStorage, readUserStates } from './storage';
 
 const PAGE_SIZE = 25;
-const SESSION_KEY = 'research-reader:remote-papers:v1';
+const CACHE_KEY = 'research-reader:remote-papers:v1';
+let memoryCache: Paper[] = [];
 const API_URL = import.meta.env.VITE_ARXIV_API_URL || '/arxiv-api';
 
 const readText = (element: Element, tag: string) => element.getElementsByTagName(tag)[0]?.textContent?.replace(/\s+/g, ' ').trim() || '';
@@ -97,20 +99,32 @@ export const mergePapers = (papers: Paper[]) => {
 
 export const readRemotePaperCache = (): Paper[] => {
   try {
-    return JSON.parse(window.sessionStorage.getItem(SESSION_KEY) || '[]');
+    const stored: unknown = JSON.parse(readStorage(CACHE_KEY) || window.sessionStorage.getItem(CACHE_KEY) || '[]');
+    const papers = Array.isArray(stored) ? stored.filter(isPaper) : [];
+    return mergePapers([...papers, ...memoryCache]);
   } catch {
-    return [];
+    return memoryCache;
   }
 };
 
 export const writeRemotePaperCache = (papers: Paper[]) => {
-  try {
-    const next = mergePapers([...readRemotePaperCache(), ...papers]).slice(0, 500);
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent('remote-papers-updated', { detail: next }));
-  } catch {
-    // Session cache is optional. Search still works without it.
-  }
+  const states = readUserStates();
+  const incomingIds = new Set(papers.map((paper) => paper.id));
+  const merged = mergePapers([...readRemotePaperCache().filter((paper) => !incomingIds.has(paper.id)), ...papers]);
+  const recentIds = new Set(merged.slice(-500).map((paper) => paper.id));
+  const next = merged.filter((paper) => recentIds.has(paper.id) || states[paper.id]?.isSaved ||
+    states[paper.id]?.isRead || states[paper.id]?.note || states[paper.id]?.viewedAt);
+  memoryCache = next;
+  writeStorage(CACHE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('remote-papers-updated', { detail: next }));
+};
+
+export const isPaper = (value: unknown): value is Paper => {
+  if (!value || typeof value !== 'object') return false;
+  const paper = value as Record<string, unknown>;
+  return ['id', 'title', 'abstract', 'primaryCategory', 'publishedAt', 'updatedAt', 'arxivUrl', 'pdfUrl']
+    .every((key) => typeof paper[key] === 'string') &&
+    ['authors', 'categories'].every((key) => Array.isArray(paper[key]) && paper[key].every((item) => typeof item === 'string'));
 };
 
 export const remotePageSize = PAGE_SIZE;

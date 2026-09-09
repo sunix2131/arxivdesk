@@ -27,11 +27,11 @@ Vite serves the app at `http://localhost:5173` and proxies live searches to the 
 - live arXiv search with debouncing, pagination and stale-request cancellation;
 - light, dark and system themes.
 
-There are no accounts or server-side user records. Clearing the browser storage removes the reading state.
+Saved and viewed article records are retained in localStorage, including results found through live search. The cache also keeps the 500 most recent untracked results. Storage errors are shown in the interface; if a write fails, copy important notes before closing the tab. There are no accounts or server-side backups. Clearing the browser storage removes the reading state.
 
 ## Updating the paper snapshot
 
-`npm run sync` reads `public/data/categories.json`, downloads matching entries and writes `public/data/papers.json`. Existing translations are retained when an entry is refreshed.
+`npm run sync` reads `public/data/categories.json`, downloads matching entries and replaces `public/data/papers.json` atomically. Existing translations are retained when an entry is refreshed. A complete upstream failure leaves the file untouched. Partial failures keep old entries and the previous refresh date, save the results that were fetched, and exit with an error so automation cannot report a full refresh.
 
 The defaults can be changed in `.env`:
 
@@ -68,7 +68,7 @@ npm test
 npm run build
 ```
 
-The tests cover filters, date boundaries, arXiv ID queries, free-text query construction and cache merging. Browser-level tests are not included yet.
+The tests cover filters, date boundaries, query construction, persistent cache retention, blocked browser storage and failed or partial snapshot updates. Automated browser-level tests are not included yet.
 
 ## Current limits
 

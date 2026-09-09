@@ -59,7 +59,7 @@ export function PaperPage(props: PageProps) {
             className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
               state?.isSaved ? 'border-reader-accent bg-reader-accent text-white' : 'border-reader-border bg-reader-card text-reader-muted'
             }`}
-            aria-label={t('card.save')}
+            aria-label={state?.isSaved ? t('card.unsave') : t('card.save')}
           >
             <Heart className="h-4 w-4" fill={state?.isSaved ? 'currentColor' : 'none'} />
           </button>
@@ -99,6 +99,7 @@ export function PaperPage(props: PageProps) {
               value={state?.note || ''}
               onChange={(event) => props.onSaveNote(paper.id, event.target.value)}
               placeholder={t('paper.notePlaceholder')}
+              aria-label={t('paper.noteTitle')}
               className="mt-5 min-h-44 w-full resize-y rounded-lg border border-reader-border bg-reader-bg p-4 text-sm leading-6 text-reader-text outline-none transition placeholder:text-reader-muted focus:border-reader-accent/50 focus:ring-4 focus:ring-reader-accent/10"
             />
           </section>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Header } from './components/Header';
@@ -7,8 +7,8 @@ import { usePapers } from './hooks/usePapers';
 import { useTheme } from './hooks/useTheme';
 import { defaultEnabledCategories } from './lib/categories';
 import { useI18n } from './lib/i18n';
-import { mergePapers, readRemotePaperCache } from './lib/arxivRemote';
-import { readEnabledCategories, writeEnabledCategories } from './lib/storage';
+import { mergePapers, readRemotePaperCache, writeRemotePaperCache } from './lib/arxivRemote';
+import { readEnabledCategories, writeEnabledCategories, storageFailures } from './lib/storage';
 import { CategoryPage } from './pages/CategoryPage';
 import { Explore } from './pages/Explore';
 import { History } from './pages/History';
@@ -25,6 +25,14 @@ export default function App() {
   const i18n = useI18n();
   const [enabledSlugs, setEnabledSlugs] = useState<string[]>([]);
   const [remotePapers, setRemotePapers] = useState(() => readRemotePaperCache());
+  const [hasStorageError, setHasStorageError] = useState(() => storageFailures().length > 0);
+
+  useEffect(() => {
+    const update = () => setHasStorageError(storageFailures().length > 0);
+    update();
+    window.addEventListener('reader-storage-status', update);
+    return () => window.removeEventListener('reader-storage-status', update);
+  }, []);
 
   useEffect(() => {
     if (categories.length > 0) {
@@ -43,7 +51,14 @@ export default function App() {
     return () => window.removeEventListener('remote-papers-updated', handleRemotePapers);
   }, []);
 
-  const allPapers = mergePapers([...papers, ...remotePapers]);
+  const allPapers = useMemo(() => mergePapers([...papers, ...remotePapers]), [papers, remotePapers]);
+  const papersRef = useRef(allPapers);
+  papersRef.current = allPapers;
+  const markViewed = useCallback((id: string) => {
+    paperState.markViewed(id);
+    const paper = papersRef.current.find((item) => item.id === id);
+    if (paper) writeRemotePaperCache([paper]);
+  }, [paperState.markViewed]);
 
   const pageProps = {
     papers: allPapers,
@@ -51,9 +66,13 @@ export default function App() {
     states: paperState.states,
     enabledSlugs,
     isLoading,
-    onToggleSaved: paperState.toggleSaved,
+    onToggleSaved: (id: string) => {
+      paperState.toggleSaved(id);
+      const paper = allPapers.find((item) => item.id === id);
+      if (paper) writeRemotePaperCache([paper]);
+    },
     onMarkRead: paperState.markRead,
-    onMarkViewed: paperState.markViewed,
+    onMarkViewed: markViewed,
     onSaveNote: paperState.saveNote,
     onRemoveHistory: paperState.removeFromHistory,
     onClearHistory: paperState.clearHistory,
@@ -63,6 +82,11 @@ export default function App() {
   return (
     <div className="min-h-[100dvh] bg-reader-bg text-reader-text">
       <Header onToggleTheme={theme.toggleTheme} />
+      {hasStorageError ? <p role="alert" className="mx-auto max-w-7xl px-4 pt-4 text-sm">
+        {i18n.language === 'ru'
+          ? 'Не удалось сохранить изменения в браузере. Скопируйте важные заметки перед закрытием вкладки.'
+          : 'Changes could not be saved in this browser. Copy important notes before closing the tab.'}
+      </p> : null}
       {error ? (
         <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
           <div className="rounded-2xl border border-reader-border bg-reader-card p-4 text-sm text-reader-muted">{error}</div>

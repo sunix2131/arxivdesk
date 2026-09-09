@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Category, Paper, PapersPayload } from '../types';
+import { isPaper } from '../lib/arxivRemote';
 
 type PapersState = {
   papers: Paper[];
@@ -14,17 +15,27 @@ export function usePapers(): PapersState {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     const load = async () => {
       try {
         const [papersResponse, categoriesResponse] = await Promise.all([
-          fetch('/data/papers.json'),
-          fetch('/data/categories.json')
+          fetch('/data/papers.json', { signal: controller.signal }),
+          fetch('/data/categories.json', { signal: controller.signal })
         ]);
-        if (!papersResponse.ok || !categoriesResponse.ok) throw new Error('Could not load local paper data.');
+        if (!papersResponse.ok || !papersResponse.headers.get('content-type')?.includes('application/json')) {
+          throw new Error('No local paper snapshot. Run npm run sync in the project directory, then reload this page.');
+        }
+        if (!categoriesResponse.ok || !categoriesResponse.headers.get('content-type')?.includes('application/json')) {
+          throw new Error('Could not load category settings from public/data/categories.json.');
+        }
 
         const payload = (await papersResponse.json()) as PapersPayload;
         const categories = (await categoriesResponse.json()) as Category[];
+        if (!payload || !Array.isArray(payload.papers) || !payload.papers.every(isPaper) ||
+            !Array.isArray(categories) || !categories.every((category) => category && typeof category.slug === 'string' && Array.isArray(category.arxiv))) {
+          throw new Error('The local paper snapshot is invalid. Run npm run sync to rebuild it.');
+        }
         if (!cancelled) {
           setState({
             papers: payload.papers,
@@ -44,6 +55,7 @@ export function usePapers(): PapersState {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
 

@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,11 +48,12 @@ const decodeXml = (value) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const readJson = async (filePath, fallback) => {
+export const readJson = async (filePath, fallback) => {
   try {
     return JSON.parse(await readFile(filePath, 'utf8'));
-  } catch {
-    return fallback;
+  } catch (error) {
+    if (error.code === 'ENOENT') return fallback;
+    throw error;
   }
 };
 
@@ -111,7 +113,7 @@ const parseRssItem = (item, query) => {
 };
 
 const fetchRssCategory = async (query, cutoff) => {
-  if (query.includes('*')) return [];
+  if (query.includes('*')) throw new Error('RSS does not support wildcard categories');
 
   const response = await fetch(`https://rss.arxiv.org/rss/${encodeURIComponent(query)}`, {
     headers: {
@@ -195,13 +197,35 @@ const fetchCategory = async (query, cutoff) => {
   return collected;
 };
 
+export const buildSnapshot = ({ previous, incoming, cutoff, successes, failures, now = new Date().toISOString() }) => {
+  if (successes === 0) throw new Error('No category was fetched; existing snapshot was not changed');
+  const byId = new Map(previous.papers.map((paper) => [paper.id, paper]));
+  incoming.forEach((paper) => byId.set(paper.id, { ...byId.get(paper.id), ...paper }));
+  const papers = [...byId.values()]
+    .filter((paper) => failures > 0 || new Date(paper.publishedAt).getTime() >= cutoff)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  return { updatedAt: failures > 0 ? previous.updatedAt : now, papers };
+};
+
+export const writeSnapshot = async (filePath, snapshot) => {
+  const temporary = `${filePath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(snapshot)}\n`, { flag: 'wx' });
+    await rename(temporary, filePath);
+  } finally {
+    await unlink(temporary).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+  }
+};
+
 const run = async () => {
   await mkdir(dataDir, { recursive: true });
   const allCategories = await readJson(categoriesPath, []);
   const categories = CATEGORY_SLUGS.length > 0 ? allCategories.filter((category) => CATEGORY_SLUGS.includes(category.slug)) : allCategories;
   const queries = DIRECT_QUERIES.length > 0 ? [{ slug: 'direct', arxiv: DIRECT_QUERIES }] : categories;
   const previous = await readJson(papersPath, { updatedAt: new Date(0).toISOString(), papers: [] });
-  const byId = new Map(previous.papers.map((paper) => [paper.id, paper]));
+  const incoming = [];
+  let successes = 0;
+  let failures = 0;
   const cutoff = Date.now() - DAYS_TO_KEEP * 24 * 60 * 60 * 1000;
 
   console.log(
@@ -212,36 +236,38 @@ const run = async () => {
     for (const query of category.arxiv || []) {
       try {
         const papers = RSS_ONLY ? await fetchRssCategory(query, cutoff) : await fetchCategory(query, cutoff);
-        papers.forEach((paper) => byId.set(paper.id, { ...byId.get(paper.id), ...paper }));
+        incoming.push(...papers);
+        successes += 1;
         console.log(`Collected ${papers.length}${RSS_ONLY ? ' RSS' : ''} papers for ${query}`);
         await delay(REQUEST_DELAY_MS);
       } catch (error) {
         if (RSS_ONLY) {
+          failures += 1;
           console.warn(`Skipping ${query}: ${error.message}`);
           continue;
         }
         console.warn(`API failed for ${query}: ${error.message}. Trying RSS fallback.`);
         try {
           const papers = await fetchRssCategory(query, cutoff);
-          papers.forEach((paper) => byId.set(paper.id, { ...byId.get(paper.id), ...paper }));
+          incoming.push(...papers);
+          successes += 1;
           console.log(`Collected ${papers.length} RSS papers for ${query}`);
           await delay(REQUEST_DELAY_MS);
         } catch (rssError) {
+          failures += 1;
           console.warn(`Skipping ${query}: ${rssError.message}`);
         }
       }
     }
   }
 
-  const papers = [...byId.values()]
-    .filter((paper) => new Date(paper.publishedAt).getTime() >= cutoff)
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-
-  await writeFile(papersPath, `${JSON.stringify({ updatedAt: new Date().toISOString(), papers })}\n`);
-  console.log(`Saved ${papers.length} papers to ${path.relative(root, papersPath)}`);
+  const snapshot = buildSnapshot({ previous, incoming, cutoff, successes, failures });
+  await writeSnapshot(papersPath, snapshot);
+  console.log(`Saved ${snapshot.papers.length} papers to ${path.relative(root, papersPath)}`);
+  if (failures > 0) throw new Error(`${failures} categories failed; partial results saved without pruning or advancing snapshot date`);
 };
 
-run().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

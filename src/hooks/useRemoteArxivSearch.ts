@@ -72,11 +72,8 @@ export function useRemoteArxivSearch(query: string) {
     try {
       const result = await searchArxivRemote(cleanQuery, offset, controller.signal);
       if (requestId.current !== id) return;
-      setPapers((current) => {
-        const next = mergePapers([...current, ...result.papers]);
-        writeRemotePaperCache(next);
-        return next;
-      });
+      writeRemotePaperCache(result.papers);
+      setPapers((current) => mergePapers([...current, ...result.papers]));
       setTotal(result.total);
     } catch (loadError) {
       if ((loadError as Error).name === 'AbortError') return;
